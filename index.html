@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRTC Call Application</title>
+  <style>
+    video {
+      width: 45%;
+      margin: 2%;
+      border: 1px solid black;
+    }
+  </style>
+</head>
+<body>
+  <video id="localVideo" autoplay muted></video>
+  <video id="remoteVideo" autoplay></video>
+
+  <script>
+    async function getMedia() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({audio: true, video: true});
+        document.getElementById('localVideo').srcObject = stream;
+        return stream;
+      } catch (err) {
+        console.error('Error accessing media devices:', err);
+      }
+    }
+
+    function createPeerConnection() {
+      const pc = new RTCPeerConnection();
+
+      pc.onicecandidate = event => {
+        if (event.candidate) {
+          // Send the candidate to the remote peer
+          sendToServer({ type: 'candidate', candidate: event.candidate });
+        }
+      };
+
+      pc.ontrack = event => {
+        document.getElementById('remoteVideo').srcObject = event.streams[0];
+      };
+
+      return pc;
+    }
+
+    async function startCall() {
+      const localStream = await getMedia();
+      const pc = createPeerConnection();
+
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      // Send the offer to the remote peer
+      sendToServer({ type: 'offer', sdp: pc.localDescription });
+    }
+
+    async function handleSignalingMessage(message) {
+      const pc = createPeerConnection();
+
+      if (message.type === 'offer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(message.sdp));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        sendToServer({ type: 'answer', sdp: pc.localDescription });
+      } else if (message.type === 'answer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(message.sdp));
+      } else if (message.type === 'candidate') {
+        const candidate = new RTCIceCandidate(message.candidate);
+        await pc.addIceCandidate(candidate);
+      }
+    }
+
+    function sendToServer(message) {
+      // Placeholder function to send signaling data to your server
+      console.log('Sending message to server:', message);
+      // Implement actual server communication here
+    }
+
+    window.onload = async () => {
+      await getMedia();
+      // Assuming you initiate a call here or wait for a signal from the server to start
+    };
+
+    // Placeholder for receiving messages from the signaling server
+    // In a real application, you would use WebSocket or another method to receive messages
+    function receiveFromServer(message) {
+      handleSignalingMessage(message);
+    }
+  </script>
+</body>
+</html>
